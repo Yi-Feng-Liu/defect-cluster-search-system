@@ -1,0 +1,11 @@
+streamlit
+pandas
+numpy
+pymongo
+matplotlib
+cx_Oracle 
+oracledb 
+sqlalchemy
+scikit-image
+pickle5
+mpld3
