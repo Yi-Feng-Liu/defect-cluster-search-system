@@ -454,6 +454,5 @@ def main(sheet_ID:str, threshold:int, option:str):
         
         
 if __name__ == '__main__':
-    colors = ['white', 'black']
-    cmap = mcolors.LinearSegmentedColormap.from_list('CMAP', colors)
-    main(sheet_ID='VKV3457722A1612', threshold=1.1, only_coc2=False)
+    
+    main(sheet_ID='VKV3457722A1812', threshold=20, option="TFT+COC2")
