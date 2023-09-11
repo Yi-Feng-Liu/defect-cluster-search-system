@@ -9,3 +9,4 @@ sqlalchemy
 scikit-image
 pickle5
 mpld3
+plotly
