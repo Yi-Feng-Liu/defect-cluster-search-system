@@ -1,8 +1,12 @@
 from modules.utils import Mark_cluster, plot_defect_info, grid_fs
+
+# from utils import Mark_cluster, plot_defect_info, grid_fs
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
-
+import pandas as pd
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 
 
 font_size = 16
@@ -13,7 +17,7 @@ def flip_arr_bottom_right(arr):
     return np.flip(np.flip(arr, 0), 1)
 
 
-def TFT_and_COC2(sheet_ID:str, threshold:int):
+def TFT_and_COC2(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=None|pd.DataFrame):
     pdi = plot_defect_info(sheet_ID)
     
     coc2_fs = grid_fs(client=pdi.MongoDBClient, db_name=pdi.DB, collection='COC2_AOI_ARRAY')
@@ -21,8 +25,27 @@ def TFT_and_COC2(sheet_ID:str, threshold:int):
     cmap = mcolors.LinearSegmentedColormap.from_list('CMAP', colors)
     
     lum_fs = grid_fs(client=pdi.MongoDBClient, db_name=pdi.DB, collection='LUM_SummaryTable')
-    tft_newest_df = pdi.get_TFT_CreateTime_df()
+    
+    duplicate_col = ['OPID', 'LED_TYPE', 'Inspection_Type']
+    
+    # for single sheet id
+    if isinstance(TFT_df, pd.DataFrame):
+        specific_time_df = TFT_df
+        sort_col_ls = ['LED_TYPE', 'Inspection_Type']
+        specific_time_df = specific_time_df.drop_duplicates(duplicate_col, keep='first')
+        tft_newest_df = specific_time_df.sort_values(by=sort_col_ls, ascending=False).reset_index(drop=True)
+        fig_tft = plot_tft(sheet_ID=sheet_ID, threshold=threshold, TFT_df=tft_newest_df)
+        
+    # for multiple sheet id. only select specific opid dataframe
+    else:
+        tft_newest_df = pdi.get_TFT_CreateTime_df() 
+        sort_col_ls = ['CreateTime','LED_TYPE', 'Inspection_Type']
+        tft_newest_df = tft_newest_df.sort_values(by=sort_col_ls, ascending=False)
+        tft_newest_df = tft_newest_df.drop_duplicates(duplicate_col, keep='first').reset_index(drop=True)
+        fig_tft = plot_tft(sheet_ID=sheet_ID, threshold=threshold, TFT_df=None, OPID=OPID)
 
+    del duplicate_col, sort_col_ls
+    
     # tft params
     R_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'R', 'L255')
     G_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'G', 'L255')
@@ -78,7 +101,7 @@ def TFT_and_COC2(sheet_ID:str, threshold:int):
     # tft + coc2
     fig_tft_coc2, axs2 = plt.subplots(2,5)
     fig_tft_coc2.set_figheight(5)
-    fig_tft_coc2.set_figwidth(20)
+    fig_tft_coc2.set_figwidth(17.5)
 
     axs2[0,0].set_xlim([0, x])
     axs2[0,0].set_ylim([0, y])
@@ -160,13 +183,12 @@ def TFT_and_COC2(sheet_ID:str, threshold:int):
     fig_tft_coc2.tight_layout()
     
     
-    fig_tft = plot_tft(sheet_ID, threshold)
     fig_coc2 = plot_coc2(sheet_ID, threshold, onlyCOC2=False)
     
     figlist = [fig_tft_coc2] + fig_tft + fig_coc2
 
     return figlist
-    
+
 
 def plot_coc2(sheet_ID:str, threshold:int, onlyCOC2:bool):
     fig_coc2, axs3 = plt.subplots(4,2)
@@ -181,10 +203,10 @@ def plot_coc2(sheet_ID:str, threshold:int, onlyCOC2:bool):
     
     coc2_fs = grid_fs(client=pdi.MongoDBClient, db_name=pdi.DB, collection='COC2_AOI_ARRAY')
     
-    coc2_df = pdi.get_COC2_df()
-    
     if onlyCOC2:
         coc2_df = pdi.get_COC2_df_without_TFT()
+    else:
+        coc2_df = pdi.get_COC2_df()
     
     coc2_id = coc2_df['SHEET_ID'][0]
     coc2_opid = coc2_df['OPID'][0]
@@ -207,8 +229,6 @@ def plot_coc2(sheet_ID:str, threshold:int, onlyCOC2:bool):
     coc2_white = R_coc2_defect_arr + G_coc2_defect_arr + B_coc2_defect_arr
     coc2_white_cluster = np.where(coc2_white > 0, 1, 0)
 
-    
-    coc2_df = pdi.get_COC2_df_without_TFT()
     mark_cluster = Mark_cluster(coc2_white_cluster, threshold, axs3[0,1])
     axs3[0, 0].set_xlim([0, x])
     axs3[0, 0].set_ylim([y, 0])
@@ -270,16 +290,39 @@ def plot_coc2(sheet_ID:str, threshold:int, onlyCOC2:bool):
     return [fig_coc2]
 
 
-def plot_tft(sheet_ID, threshold):
+def plot_tft(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=None|str):
     pdi = plot_defect_info(sheet_ID)
     
     colors = ['white', 'black']
     cmap = mcolors.LinearSegmentedColormap.from_list('CMAP', colors)
 
     lum_fs = grid_fs(client=pdi.MongoDBClient, db_name=pdi.DB, collection='LUM_SummaryTable')
-    tft_newest_df = pdi.get_TFT_CreateTime_df()
+    
+    duplicate_col = ['OPID', 'LED_TYPE', 'Inspection_Type']
+    
+    # for single sheet id
+    if isinstance(TFT_df, pd.DataFrame):
+        specific_time_df = TFT_df
+        sort_col_ls = ['LED_TYPE', 'Inspection_Type']
+        specific_time_df = specific_time_df.drop_duplicates(duplicate_col, keep='first')
+        tft_newest_df = specific_time_df.sort_values(by=sort_col_ls, ascending=False).reset_index(drop=True)
+    
+    # for multiple sheet id    
+    else:
+        tft_newest_df = pdi.get_TFT_CreateTime_df() 
+        sort_col_ls = ['CreateTime','LED_TYPE', 'Inspection_Type']
+        tft_newest_df = tft_newest_df.sort_values(by=sort_col_ls, ascending=False)
+        
+        newest_ct = tft_newest_df['CreateTime'].unique()[0]
+        duplicate_col = ['CreateTime', 'OPID', 'LED_TYPE', 'Inspection_Type']
+        tft_newest_df = tft_newest_df[(tft_newest_df['CreateTime'] == newest_ct) & (tft_newest_df['OPID'] == OPID)]
+        tft_newest_df = tft_newest_df.drop_duplicates(duplicate_col, keep='first').reset_index(drop=True)
+    
+    del duplicate_col, sort_col_ls
+    
     ct = tft_newest_df['CreateTime'][0]
     OPID = tft_newest_df['OPID'][0]
+    
     R_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'R', 'L255')
     G_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'G', 'L255')
     B_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'B', 'L255')
@@ -408,7 +451,7 @@ def plot_tft(sheet_ID, threshold):
     fig_full, axs2 = plt.subplots(1, 2)
     # white TFT
     fig_full.set_figheight(5)
-    fig_full.set_figwidth(15)
+    fig_full.set_figwidth(17.5)
     tft_white = R_tft_defect_arr + G_tft_defect_arr + B_tft_defect_arr
     tft_white_cluster = np.where(tft_white > 0, 1, 0)
 
@@ -431,22 +474,26 @@ def plot_tft(sheet_ID, threshold):
     fig_full.tight_layout()
     return [fig_tft, fig_full]
     
+    
 
-def main(sheet_ID:str, threshold:int, option:str):
+    
+    
+    
+
+def main(sheet_ID:str, threshold:int, option:str, TFT_df=None|pd.DataFrame, OPID=None|str):
     options = ["COC2", "TFT", "TFT+COC2"]
     
     if threshold is not isinstance(threshold, int):
         threshold = int(threshold)
         
     if option==options[1]:
-        fig_list = plot_tft(sheet_ID, threshold)
-        return fig_list
-        
+        fig_list = plot_tft(sheet_ID, threshold, TFT_df=TFT_df, OPID=OPID)
+
     elif option==options[0]:
         fig_list = plot_coc2(sheet_ID, threshold, onlyCOC2=True)
     
     elif option==options[2]:
-        fig_list = TFT_and_COC2(sheet_ID, threshold)
+        fig_list = TFT_and_COC2(sheet_ID, threshold, TFT_df=TFT_df, OPID=OPID)
         
     return fig_list
     
@@ -454,5 +501,5 @@ def main(sheet_ID:str, threshold:int, option:str):
         
         
 if __name__ == '__main__':
-    
+  
     main(sheet_ID='VKV3457722A1812', threshold=20, option="TFT+COC2")
