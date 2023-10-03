@@ -1,4 +1,4 @@
-streamlit
+streamlit==1.27.0
 pandas
 numpy
 pymongo
@@ -10,3 +10,6 @@ scikit-image
 pickle5
 mpld3
 plotly
+streamlit_plotly_events
+python-pptx
+collection
