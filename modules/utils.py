@@ -1,7 +1,18 @@
 import re
 from typing import Any
 import pandas as pd
-
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from scipy.ndimage import label ,center_of_mass
+from matplotlib.axes._axes import Axes
+import numpy.typing as npt
+import numpy as np
+import pickle
+from matplotlib.colors import LinearSegmentedColormap
+from sqlalchemy import create_engine
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
 
 
 
@@ -63,13 +74,11 @@ from gridfs import GridFS
 from bson import ObjectId
 
 def connect_MongoDB(client:str, db_name:str, collection:str) -> Collection:
-    try:
-        client = MongoClient(client)
-        user_db = client[db_name]
-        user_collection = user_db[collection]
-        return user_collection
-    except Exception as e:
-        raise f'{str(e)}'
+    client = MongoClient(client)
+    user_db = client[db_name]
+    user_collection = user_db[collection]
+    return user_collection
+
 
 
 def grid_fs(client:str, db_name:str, collection:str) -> GridFS:
@@ -79,27 +88,32 @@ def grid_fs(client:str, db_name:str, collection:str) -> GridFS:
     return fs
 
 
+def get_df_from_period_of_time(start_date:str, end_date:str, InsType:str, OPID:str) -> pd.DataFrame:
+    client = connect_MongoDB(client="mongodb://wma:mamcb1@10.88.26.102:27017", db_name='MT', collection='LUM_SummaryTable')
+    cursor = client.find(
+        {
+            'CreateTime': {'$gte':start_date, '$lte':end_date}, 
+        },
+        {
+            '_id':0, 'CreateTime':1, 'SHEET_ID':1, 'OPID':1, 'LED_TYPE':1, 'NGCNT':1, 'LightingCheck_2D':1, 'Inspection_Type':1
+        }
+    )
+    ts_df = pd.DataFrame.from_records(cursor).fillna('')
+    ts_df = ts_df[(ts_df['Inspection_Type']==InsType) & (ts_df['OPID']==OPID)]
+    ts_df = ts_df.sort_values(by=['CreateTime', 'SHEET_ID', 'NGCNT'], ascending=False)
+    ts_df = ts_df.drop_duplicates(subset=['SHEET_ID', 'LED_TYPE', 'LightingCheck_2D'], keep='first').reset_index(drop=True)
+    ts_df = ts_df.drop_duplicates(subset=['SHEET_ID', 'LED_TYPE'], keep='first').reset_index(drop=True)
+    return ts_df
 
-
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-from scipy.ndimage import label ,center_of_mass
-from matplotlib.axes._axes import Axes
-import numpy.typing as npt
-import numpy as np
-import pickle
-from matplotlib.colors import LinearSegmentedColormap
-from sqlalchemy import create_engine
-import pandas as pd
 
 
 
 class plot_defect_info():
     """Plot the specific RGB defect info from specific Sheet ID."""
-    def __init__(self, sheet_ID:str) -> None:
+    def __init__(self, sheet_ID:str|None) -> None:
         self.sheet_ID = sheet_ID
-        self.OrackeDB = "oracle://passowrd:user@db_address"
-        self.MongoDBClient = "mongodb://passowrd:user@address:27017"
+        self.OrackeDB = "oracle://L4A_ULEDMFG_AP:L4A_ULEDMFG$AP@10.88.222.116:1522/m01h"
+        self.MongoDBClient = "mongodb://wma:mamcb1@10.88.26.102:27017"
         self.DB = "MT"
         
              
@@ -176,25 +190,35 @@ class plot_defect_info():
         return coc2_df
 
     
-    def get_TFT_CreateTime_df(self):
+    def get_TFT_CreateTime_df(self) -> pd.DataFrame:
         TFTclient = connect_MongoDB(client=self.MongoDBClient, db_name=self.DB, collection='LUM_SummaryTable')
 
         ts = TFTclient.find({'SHEET_ID':self.sheet_ID}, 
-                            {'_id':0, 'Grade':1, 'OPID':1, 'SHEET_ID':1 ,'CreateTime':1, 'NGCNT':1, 'LED_TYPE':1, 'Luminance_2D':1, 'LightingCheck_2D':1, 'Yield':1, 'Inspection_Type':1})
+                            {'_id':0, 'Grade':1, 'OPID':1, 'SHEET_ID':1 ,'CreateTime':1, 'NGCNT':1, 'LED_TYPE':1, 'Luminance_2D':1, 'LightingCheck_2D':1, 'Yield':1, 'Inspection_Type':1, 'Dataframe_id':1})
         
         ts_df = pd.DataFrame.from_records(ts)
         
         ts_df = ts_df.fillna('')
         ts_df = ts_df.sort_values(by=['CreateTime', 'LED_TYPE', 'NGCNT'], ascending=False).reset_index(drop=True)
-
-        ctls = ts_df['CreateTime'].unique()
-        newest_df = ts_df[(ts_df['CreateTime'] == ctls[0])].drop_duplicates(['OPID', 'LED_TYPE', 'Inspection_Type'], keep='first')
-        
-        return newest_df
+        return ts_df
     
+    
+    def get_TFT_newest_df(self, df, InsType, OPID) -> pd.DataFrame:
+        ts_df = df[(df['Inspection_Type']==InsType) & (df['OPID']==OPID)]
+        ts_df = ts_df.drop_duplicates(subset=['SHEET_ID', 'LED_TYPE', 'LightingCheck_2D'], keep='first').reset_index(drop=True)
+        ts_df = ts_df.drop_duplicates(subset=['SHEET_ID', 'LED_TYPE'], keep='first').reset_index(drop=True)
+        return ts_df
+    
+    
+    def get_option_list(self, ts_df:pd.DataFrame) -> list:
+        """Let column of createTime and OPID into a list
+        """
+        option_list = (ts_df['CreateTime']  + " " + ts_df['OPID']).unique()
+        return option_list
+    
+       
         
-        
-    def get_specific_object_id(self, df:pd.DataFrame, column_name:str, LED_TYPE:str, Ins_tpye:str|None) -> ObjectId: 
+    def get_specific_object_id(self, df:pd.DataFrame, column_name:str, LED_TYPE:str, Ins_tpye=str|None) -> ObjectId: 
         """Give a Dataframe and select the column what you want then give the LED_TYPE and Inspection type, 
         and you will get the specific ObjectID
 
@@ -211,8 +235,8 @@ class plot_defect_info():
         if Ins_tpye != None:
             object_id = df[(df['LED_TYPE']==LED_TYPE) & (df['Inspection_Type']==Ins_tpye)][column_name].tolist()[0]
             return object_id
-        object_id = df[(df['LED_TYPE']==LED_TYPE)][column_name].tolist()[0]
         
+        object_id = df[(df['LED_TYPE']==LED_TYPE)][column_name].tolist()[0]
         return object_id
     
     
@@ -347,15 +371,116 @@ class plot_defect_info():
             normal = df[(df['LED_TYPE']==LED_TYPE) & (df['Inspection_Type']==ins)]
             normal_ngcnt = normal.NGCNT.tolist()
             normal_yield = normal.Yield.tolist()
-            fianl = normal_ngcnt + normal_yield
-            order_ls.append(fianl)
+            final = normal_ngcnt + normal_yield
+            order_ls.append(final)
             
         return order_ls
 
+
+    def get_TFT_full_RGB_Dataframe(self, df:pd.DataFrame, Ins_tpye:str) -> tuple[pd.DataFrame, str, str]:
+        sort_col_ls = ['LED_TYPE', 'Inspection_Type']
+        duplicate_col = ['OPID', 'LED_TYPE', 'Inspection_Type']
+        specific_time_df = df.drop_duplicates(duplicate_col, keep='first')
+        specific_time_df = specific_time_df.sort_values(by=sort_col_ls, ascending=False).reset_index(drop=True)
         
+        fs = grid_fs(self.MongoDBClient, self.DB, collection='LUM_SummaryTable')
         
+        R_df_ID = self.get_specific_object_id(specific_time_df, 'Dataframe_id', 'R', Ins_tpye) 
+        G_df_ID = self.get_specific_object_id(specific_time_df, 'Dataframe_id', 'G', Ins_tpye)
+        B_df_ID = self.get_specific_object_id(specific_time_df, 'Dataframe_id', 'B', Ins_tpye)
         
+        R_df = pickle.loads(fs.get(ObjectId(R_df_ID)).read())
+        R_df = pd.DataFrame(R_df)
         
+        G_df = pickle.loads(fs.get(ObjectId(G_df_ID)).read())
+        G_df = pd.DataFrame(G_df)
+        
+        B_df = pickle.loads(fs.get(ObjectId(B_df_ID)).read())
+        B_df = pd.DataFrame(B_df)
+        
+        full_df = pd.concat([R_df, G_df, B_df])
+        
+        specific_defect_code_col = ''
+        specific_lumiance_col = ''
+    
+        if Ins_tpye == 'L255':
+            specific_defect_code_col = 'Defect_Code'
+            specific_lumiance_col = 'LED_Luminance'
+            
+        else:
+            specific_defect_code_col = f'Defect_Code_{Ins_tpye}'
+            specific_lumiance_col = f'{Ins_tpye}_LED_Luminance'
+        
+        return full_df, specific_defect_code_col, specific_lumiance_col
+    
+    
+    def array_to_dataframe(self, Object_ID) -> pd.DataFrame:
+        df = pickle.loads(Object_ID)
+        if isinstance(df, np.ndarray):
+            return pd.DataFrame(df)
+        return df
+    
+    
+    def get_COC2_full_RGB_Dataframe(self):
+        coc2_df = self.get_COC2_df_without_TFT()
+        fs = grid_fs(self.MongoDBClient, self.DB, collection='COC2_AOI_DF')
+        R_COC2_DF_ID = self.get_specific_object_id(coc2_df, 'df_id', 'R', Ins_tpye=None)
+        G_COC2_DF_ID = self.get_specific_object_id(coc2_df, 'df_id', 'G', Ins_tpye=None)
+        B_COC2_DF_ID = self.get_specific_object_id(coc2_df, 'df_id', 'B', Ins_tpye=None)
+        
+        R_coc2_df = fs.get(ObjectId(R_COC2_DF_ID)).read()
+        R_coc2_df = self.array_to_dataframe(R_coc2_df)
+        
+        G_coc2_df = fs.get(ObjectId(G_COC2_DF_ID)).read()
+        G_coc2_df = self.array_to_dataframe(G_coc2_df)
+        
+        B_coc2_df = fs.get(ObjectId(B_COC2_DF_ID)).read()
+        B_coc2_df = self.array_to_dataframe(B_coc2_df)
+        
+        # col_name = ['CreateTime', 'OPID', 'EQP_ID', 'Model_No', 'ABBR_No', 'EQP_Recipe_ID', 'LED_TYPE', 'LED_Index_X', 'LED_Index_Y', 'Shift_X', 'Shif_Y' ,'Rotate', 'photoname', 'Defect_Reciepe', 'Target_Carrier_ID', 'LINK']
+        
+        col_name = ['LED_TYPE', 'LED_Index_X', 'LED_Index_Y', 'Shift_X', 'Shif_Y' ,'Rotate', 'Defect_Reciepe', 'LINK']
+
+        full_df = pd.concat([R_coc2_df, G_coc2_df, B_coc2_df])
+        full_df = full_df[full_df[13] != 'OK']
+        
+        full_df.drop(columns=[0, 1, 2, 3, 4, 5, 12, 14], inplace=True)
+        
+        full_df = full_df[full_df.columns[:8]]
+        full_df.columns = col_name
+        
+        return full_df
+    
+    
+    def interact_scatter(self, df, col_led_index_x, col_led_index_y, col_of_color, symbol, hover_data:list) -> go.Figure:
+        if 'LED_Index_J' in df.columns:
+            max_y = df['LED_Index_J'].max()
+        else:
+            max_y = df['LED_Index_Y'].max()
+            
+        df = df[df[symbol]!= '']
+        
+        color_discrete_map = {'R': 'rgb(255,0,0)', 'G': 'rgb(0,255,0)', 'B': 'rgb(0,0,255)'}
+        fig = px.scatter(
+            df,
+            x=col_led_index_x,
+            y=col_led_index_y,
+            color=col_of_color,
+            color_discrete_map=color_discrete_map,
+            symbol=symbol,
+            hover_data=hover_data,
+            color_continuous_scale="reds",
+            width=1000,
+            height=500,
+            range_y=[max_y, 0],
+        )
+        
+        fig.update_layout(
+            xaxis={'side': 'top'},
+        )
+        
+        return fig
+
 
 class Mark_cluster():
     """
@@ -440,3 +565,64 @@ class Mark_cluster():
                 self.axs.text((center_x-rect_width/2)+3, (center_y-rect_height/2)-3, size, color='black', fontsize=8, bbox=dict(facecolor='lime', pad=2, edgecolor='none'))
                 
         return self.axs
+
+    
+import collections 
+import collections.abc
+from pptx import Presentation
+from pptx.util import Inches
+from glob import glob
+import os
+from io import BytesIO
+
+class CreatePPT():
+    """
+    Create PPT file by image name
+    """
+    def __init__(self):
+        self.template_ppt_path = './modules/template ppt/template.pptx'
+        self.prs = Presentation(self.template_ppt_path)
+        self.imgls = glob('./modules/temp/*.png')
+        self.temp_ppt_path = "./modules/temp/temp.pptx"
+    
+    
+    def __call__(self, image_path) -> Any:
+        
+        if os.path.exists(self.temp_ppt_path):
+            self.prs = Presentation(self.temp_ppt_path)
+        else:
+            self.prs = Presentation(self.template_ppt_path)
+            
+        self.addSlide(image_path)
+        self.save()
+    
+        
+    def addSlide(self, image_path:str, left=Inches(0), top=Inches(1.5), width=None, height=None):
+        slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
+        slide.shapes.add_picture(image_path, left=left, top=top, width=width, height=height)
+    
+    
+    def save(self):
+        self.prs.save("./modules/temp/temp.pptx")
+    
+    
+    def delete_temp_file(self):
+        if os.path.exists(self.temp_ppt_path):
+            os.remove(self.temp_ppt_path)
+ 
+    
+    def load_ppt(self):
+        if os.path.exists(self.temp_ppt_path):
+            document = Presentation(self.temp_ppt_path)
+        else:
+            document = Presentation(self.template_ppt_path)
+            
+        binary_output = BytesIO()
+        document.save(binary_output)
+        
+        return binary_output
+            
+    
+
+
+
