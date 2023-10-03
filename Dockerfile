@@ -27,4 +27,4 @@ EXPOSE 8502
 
 # CMD bash
 
-ENTRYPOINT ["streamlit", "run", "interface.py", "--server.port=8502", "--server.fileWatcherType", "none"]
+ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8502", "--server.fileWatcherType", "none"]
