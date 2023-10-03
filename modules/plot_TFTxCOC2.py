@@ -1,12 +1,9 @@
-from modules.utils import Mark_cluster, plot_defect_info, grid_fs
-
-# from utils import Mark_cluster, plot_defect_info, grid_fs
+from modules.utils import Mark_cluster, plot_defect_info, grid_fs, CreatePPT
+import plotly.express as px
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
-from plotly.subplots import make_subplots
-import plotly.graph_objects as go
 
 
 font_size = 16
@@ -17,7 +14,36 @@ def flip_arr_bottom_right(arr):
     return np.flip(np.flip(arr, 0), 1)
 
 
-def TFT_and_COC2(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=None|pd.DataFrame):
+def interact_scatter(df:pd.DataFrame, col_led_index_x:str, col_led_index_y:str, col_of_color:str, symbol:str, labels:list,
+                     max_col_led_index_y=None):
+    
+    if max_col_led_index_y == None:
+        max_y = df['LED_Indexf_J'].max()
+    
+    color_discrete_map = {'R': 'rgb(255,0,0)', 'G': 'rgb(0,255,0)', 'B': 'rgb(0,0,255)'}
+    fig = px.scatter(
+        df,
+        x=col_led_index_x,
+        y=col_led_index_y,
+        color=col_of_color,
+        color_discrete_map=color_discrete_map,
+        symbol=symbol,
+        hover_data=labels,
+        color_continuous_scale="reds",
+        width=1000,
+        height=500,
+        range_y=[max_y, 0],
+    )
+    
+    fig.update_layout(
+        xaxis={'side': 'top'},
+    )
+    
+    return fig
+
+
+
+def TFT_and_COC2(sheet_ID:str, threshold:int, Ins_type:str, TFT_df=None|pd.DataFrame, OPID=None|pd.DataFrame):
     pdi = plot_defect_info(sheet_ID)
     
     coc2_fs = grid_fs(client=pdi.MongoDBClient, db_name=pdi.DB, collection='COC2_AOI_ARRAY')
@@ -34,7 +60,7 @@ def TFT_and_COC2(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=Non
         sort_col_ls = ['LED_TYPE', 'Inspection_Type']
         specific_time_df = specific_time_df.drop_duplicates(duplicate_col, keep='first')
         tft_newest_df = specific_time_df.sort_values(by=sort_col_ls, ascending=False).reset_index(drop=True)
-        fig_tft = plot_tft(sheet_ID=sheet_ID, threshold=threshold, TFT_df=tft_newest_df)
+        fig_tft = plot_tft(sheet_ID=sheet_ID, threshold=threshold, Ins_type=Ins_type, TFT_df=tft_newest_df)
         
     # for multiple sheet id. only select specific opid dataframe
     else:
@@ -42,18 +68,18 @@ def TFT_and_COC2(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=Non
         sort_col_ls = ['CreateTime','LED_TYPE', 'Inspection_Type']
         tft_newest_df = tft_newest_df.sort_values(by=sort_col_ls, ascending=False)
         tft_newest_df = tft_newest_df.drop_duplicates(duplicate_col, keep='first').reset_index(drop=True)
-        fig_tft = plot_tft(sheet_ID=sheet_ID, threshold=threshold, TFT_df=None, OPID=OPID)
+        fig_tft = plot_tft(sheet_ID=sheet_ID, threshold=threshold, Ins_type=Ins_type, OPID=OPID)
 
     del duplicate_col, sort_col_ls
     
     # tft params
-    R_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'R', 'L255')
-    G_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'G', 'L255')
-    B_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'B', 'L255')
+    R_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'R', Ins_type)
+    G_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'G', Ins_type)
+    B_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'B', Ins_type)
     
-    R_lum_ID = pdi.get_specific_object_id(tft_newest_df, 'Luminance_2D', 'R', 'L255')
-    G_lum_ID = pdi.get_specific_object_id(tft_newest_df, 'Luminance_2D', 'G', 'L255')
-    B_lum_ID = pdi.get_specific_object_id(tft_newest_df, 'Luminance_2D', 'B', 'L255')
+    R_lum_ID = pdi.get_specific_object_id(tft_newest_df, 'Luminance_2D', 'R', Ins_type)
+    G_lum_ID = pdi.get_specific_object_id(tft_newest_df, 'Luminance_2D', 'G', Ins_type)
+    B_lum_ID = pdi.get_specific_object_id(tft_newest_df, 'Luminance_2D', 'B', Ins_type)
     
     R_tft_x, R_tft_y = pdi.get_defect_coord(object_id=R_light_ID, fs=lum_fs, coc2=False)
     G_tft_x, G_tft_y = pdi.get_defect_coord(object_id=G_light_ID, fs=lum_fs, coc2=False)
@@ -105,21 +131,21 @@ def TFT_and_COC2(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=Non
 
     axs2[0,0].set_xlim([0, x])
     axs2[0,0].set_ylim([0, y])
-    axs2[0,0].scatter(R_coc2_x, R_coc2_y, s=1, marker='.', edgecolors='lightcoral', facecolors='none')
+    axs2[0,0].scatter(R_coc2_x, R_coc2_y, s=10, marker='.', edgecolors='lightcoral', facecolors='none')
     axs2[0,0].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
     axs2[0,0].invert_yaxis()
     
-    axs2[0,1].scatter(G_coc2_x, G_coc2_y, s=1, marker='.', edgecolors='mediumseagreen', facecolors='none')
+    axs2[0,1].scatter(G_coc2_x, G_coc2_y, s=10, marker='.', edgecolors='mediumseagreen', facecolors='none')
     axs2[0,1].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
     axs2[0,1].invert_yaxis()
     
-    axs2[0,2].scatter(B_coc2_x, B_coc2_y, s=1, marker='.', edgecolors='blue', facecolors='none')
+    axs2[0,2].scatter(B_coc2_x, B_coc2_y, s=10, marker='.', edgecolors='blue', facecolors='none')
     axs2[0,2].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
     axs2[0,2].invert_yaxis()
     
-    axs2[0,3].scatter(R_coc2_x, R_coc2_y, s=1, marker='.', edgecolors='lightcoral', facecolors='none')
-    axs2[0,3].scatter(G_coc2_x, G_coc2_y, s=1, marker='.', edgecolors='mediumseagreen', facecolors='none')
-    axs2[0,3].scatter(B_coc2_x, B_coc2_y, s=1, marker='.', edgecolors='blue', facecolors='none')
+    axs2[0,3].scatter(R_coc2_x, R_coc2_y, s=10, marker='.', edgecolors='lightcoral', facecolors='none')
+    axs2[0,3].scatter(G_coc2_x, G_coc2_y, s=10, marker='.', edgecolors='mediumseagreen', facecolors='none')
+    axs2[0,3].scatter(B_coc2_x, B_coc2_y, s=10, marker='.', edgecolors='blue', facecolors='none')
     axs2[0,3].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
     axs2[0,3].invert_yaxis()
 
@@ -129,12 +155,12 @@ def TFT_and_COC2(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=Non
     axs2[0,3].set_title('COC2 Full Defect Map', y=bottom_gap)
 
 
-    axs2[1,0].scatter(R_tft_x, R_tft_y, s=1, marker='.', edgecolors='lightcoral', facecolors='none')
-    axs2[1,1].scatter(G_tft_x, G_tft_y, s=1, marker='.', edgecolors='mediumseagreen', facecolors='none')
-    axs2[1,2].scatter(B_tft_x, B_tft_y, s=1, marker='.', edgecolors='blue', facecolors='none')
-    axs2[1,3].scatter(R_tft_x, R_tft_y, s=1, marker='.', edgecolors='lightcoral', facecolors='none')
-    axs2[1,3].scatter(G_tft_x, G_tft_y, s=1, marker='.', edgecolors='mediumseagreen', facecolors='none')
-    axs2[1,3].scatter(B_tft_x, B_tft_y, s=1, marker='.', edgecolors='blue', facecolors='none')
+    axs2[1,0].scatter(R_tft_x, R_tft_y, s=10, marker='.', edgecolors='lightcoral', facecolors='none')
+    axs2[1,1].scatter(G_tft_x, G_tft_y, s=10, marker='.', edgecolors='mediumseagreen', facecolors='none')
+    axs2[1,2].scatter(B_tft_x, B_tft_y, s=10, marker='.', edgecolors='blue', facecolors='none')
+    axs2[1,3].scatter(R_tft_x, R_tft_y, s=10, marker='.', edgecolors='lightcoral', facecolors='none')
+    axs2[1,3].scatter(G_tft_x, G_tft_y, s=10, marker='.', edgecolors='mediumseagreen', facecolors='none')
+    axs2[1,3].scatter(B_tft_x, B_tft_y, s=10, marker='.', edgecolors='blue', facecolors='none')
 
     axs2[1,0].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
     axs2[1,1].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
@@ -232,9 +258,9 @@ def plot_coc2(sheet_ID:str, threshold:int, onlyCOC2:bool):
     mark_cluster = Mark_cluster(coc2_white_cluster, threshold, axs3[0,1])
     axs3[0, 0].set_xlim([0, x])
     axs3[0, 0].set_ylim([y, 0])
-    axs3[0, 0].scatter(R_coc2_x, R_coc2_y, s=1, marker='.', edgecolors='lightcoral', facecolors='none')
-    axs3[0, 0].scatter(G_coc2_x, G_coc2_y, s=1, marker='.', edgecolors='mediumseagreen', facecolors='none')
-    axs3[0, 0].scatter(B_coc2_x, B_coc2_y, s=1, marker='.', edgecolors='blue', facecolors='none')
+    axs3[0, 0].scatter(R_coc2_x, R_coc2_y, s=10, marker='.', edgecolors='lightcoral', facecolors='none')
+    axs3[0, 0].scatter(G_coc2_x, G_coc2_y, s=10, marker='.', edgecolors='mediumseagreen', facecolors='none')
+    axs3[0, 0].scatter(B_coc2_x, B_coc2_y, s=10, marker='.', edgecolors='blue', facecolors='none')
     axs3[0, 0].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
     axs3[0, 0].set_title('COC2 White Defect Map', y=bottom_gap)
     # axs3[0, 0].invert_yaxis()
@@ -250,7 +276,7 @@ def plot_coc2(sheet_ID:str, threshold:int, onlyCOC2:bool):
 
     axs3[1, 0].set_xlim([0, x])
     axs3[1, 0].set_ylim([0, y])
-    axs3[1, 0].scatter(R_coc2_x, R_coc2_y, s=1, marker='.', edgecolors='lightcoral', facecolors='none')
+    axs3[1, 0].scatter(R_coc2_x, R_coc2_y, s=10, marker='.', edgecolors='lightcoral', facecolors='none')
     axs3[1, 0].set_title('R Defect Scatter', y=bottom_gap)
     axs3[1, 0].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
     axs3[1, 0].invert_yaxis()
@@ -263,7 +289,7 @@ def plot_coc2(sheet_ID:str, threshold:int, onlyCOC2:bool):
 
     axs3[2, 0].set_xlim([0, x])
     axs3[2, 0].set_ylim([0, y])
-    axs3[2, 0].scatter(G_coc2_x, G_coc2_y, s=1, marker='.', edgecolors='mediumseagreen', facecolors='none')
+    axs3[2, 0].scatter(G_coc2_x, G_coc2_y, s=10, marker='.', edgecolors='mediumseagreen', facecolors='none')
     axs3[2, 0].set_title('G Defect Scatter', y=bottom_gap)
     axs3[2, 0].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
     axs3[2, 0].invert_yaxis()
@@ -275,7 +301,7 @@ def plot_coc2(sheet_ID:str, threshold:int, onlyCOC2:bool):
 
     axs3[3, 0].set_xlim([0, x])
     axs3[3, 0].set_ylim([0, y])
-    axs3[3, 0].scatter(B_coc2_x, B_coc2_y, s=1, marker='.', edgecolors='blue', facecolors='none')
+    axs3[3, 0].scatter(B_coc2_x, B_coc2_y, s=10, marker='.', edgecolors='blue', facecolors='none')
     axs3[3, 0].set_title('B Defect Scatter', y=bottom_gap)
     axs3[3, 0].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
     axs3[3, 0].invert_yaxis()
@@ -290,7 +316,7 @@ def plot_coc2(sheet_ID:str, threshold:int, onlyCOC2:bool):
     return [fig_coc2]
 
 
-def plot_tft(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=None|str):
+def plot_tft(sheet_ID:str, threshold:int, Ins_type:str, TFT_df=None|pd.DataFrame, OPID=None|str):
     pdi = plot_defect_info(sheet_ID)
     
     colors = ['white', 'black']
@@ -322,14 +348,15 @@ def plot_tft(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=None|st
     
     ct = tft_newest_df['CreateTime'][0]
     OPID = tft_newest_df['OPID'][0]
+    grade = tft_newest_df['Grade'][0]
     
-    R_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'R', 'L255')
-    G_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'G', 'L255')
-    B_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'B', 'L255')
+    R_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'R', Ins_type)
+    G_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'G', Ins_type)
+    B_light_ID = pdi.get_specific_object_id(tft_newest_df, 'LightingCheck_2D', 'B', Ins_type)
     
-    R_lum_ID = pdi.get_specific_object_id(tft_newest_df, 'Luminance_2D', 'R', 'L255')
-    G_lum_ID = pdi.get_specific_object_id(tft_newest_df, 'Luminance_2D', 'G', 'L255')
-    B_lum_ID = pdi.get_specific_object_id(tft_newest_df, 'Luminance_2D', 'B', 'L255')
+    R_lum_ID = pdi.get_specific_object_id(tft_newest_df, 'Luminance_2D', 'R', Ins_type)
+    G_lum_ID = pdi.get_specific_object_id(tft_newest_df, 'Luminance_2D', 'G', Ins_type)
+    B_lum_ID = pdi.get_specific_object_id(tft_newest_df, 'Luminance_2D', 'B', Ins_type)
     
     R_pattern_ls = pdi.get_NGCNT_Yield(df=tft_newest_df, LED_TYPE='R')
     G_pattern_ls = pdi.get_NGCNT_Yield(df=tft_newest_df, LED_TYPE='G')
@@ -366,7 +393,7 @@ def plot_tft(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=None|st
     
     axs[0, 0].set_xlim([x, 0])
     axs[0, 0].set_ylim([0, y])
-    axs[0, 0].scatter(R_tft_x, R_tft_y, s=1, marker='.', edgecolors='lightcoral', facecolors='none')
+    axs[0, 0].scatter(R_tft_x, R_tft_y, s=10, marker='.', edgecolors='lightcoral', facecolors='none')
     axs[0, 0].set_title('R Defect Scatter', y=bottom_gap)
     axs[0, 0].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
     axs[0, 0].invert_xaxis()
@@ -385,7 +412,7 @@ def plot_tft(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=None|st
 
     axs[1, 0].set_xlim([x, 0])
     axs[1, 0].set_ylim([0, y])
-    axs[1, 0].scatter(G_tft_x, G_tft_y, s=1, marker='.', edgecolors='mediumseagreen', facecolors='none')
+    axs[1, 0].scatter(G_tft_x, G_tft_y, s=10, marker='.', edgecolors='mediumseagreen', facecolors='none')
     axs[1, 0].set_title('G Defect Scatter', y=bottom_gap)
     axs[1, 0].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
     axs[1, 0].invert_xaxis()
@@ -404,7 +431,7 @@ def plot_tft(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=None|st
 
     axs[2, 0].set_xlim([x, 0])
     axs[2, 0].set_ylim([0, y])
-    axs[2, 0].scatter(B_tft_x, B_tft_y, s=1, marker='.', edgecolors='blue', facecolors='none')
+    axs[2, 0].scatter(B_tft_x, B_tft_y, s=10, marker='.', edgecolors='blue', facecolors='none')
     axs[2, 0].set_title('B Defect Scatter', y=bottom_gap)
     axs[2, 0].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
     axs[2, 0].invert_xaxis()
@@ -445,7 +472,7 @@ def plot_tft(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=None|st
         bbox = [3.5, 0., 0.5, 1],
     )
     
-    fig_tft.suptitle(f'{ct} {sheet_ID} {OPID} P L255 Defect Info', fontsize=font_size, y=1.05)
+    fig_tft.suptitle(f'{ct} {sheet_ID} {OPID} {grade} {Ins_type} Defect Info', fontsize=font_size, y=1.05)
     
 
     fig_full, axs2 = plt.subplots(1, 2)
@@ -457,9 +484,9 @@ def plot_tft(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=None|st
 
     axs2[0].set_xlim([x, 0])
     axs2[0].set_ylim([0, y])
-    axs2[0].scatter(R_tft_x, R_tft_y, s=1, marker='.', edgecolors='lightcoral', facecolors='none')
-    axs2[0].scatter(G_tft_x, G_tft_y, s=1, marker='.', edgecolors='mediumseagreen', facecolors='none')
-    axs2[0].scatter(B_tft_x, B_tft_y, s=1, marker='.', edgecolors='blue', facecolors='none')
+    axs2[0].scatter(R_tft_x, R_tft_y, s=10, marker='.', edgecolors='lightcoral', facecolors='none')
+    axs2[0].scatter(G_tft_x, G_tft_y, s=10, marker='.', edgecolors='mediumseagreen', facecolors='none')
+    axs2[0].scatter(B_tft_x, B_tft_y, s=10, marker='.', edgecolors='blue', facecolors='none')
     axs2[0].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
     axs2[0].set_title('TFT White Defect Map', y=bottom_gap)
     axs2[0].invert_xaxis()
@@ -473,27 +500,90 @@ def plot_tft(sheet_ID:str, threshold:int, TFT_df=None|pd.DataFrame, OPID=None|st
     fig_full.suptitle(f'{sheet_ID}_{OPID} Result', fontsize=font_size, y=1)
     fig_full.tight_layout()
     return [fig_tft, fig_full]
-    
-    
 
-    
-    
-    
 
-def main(sheet_ID:str, threshold:int, option:str, TFT_df=None|pd.DataFrame, OPID=None|str):
+# plot shipping to M01 specific image
+def main_forShipping(df:pd.DataFrame, SHEET_ID:str, Ins_type):
+    df = df[df['SHEET_ID']==SHEET_ID].sort_values(['LED_TYPE'], ascending=False).reset_index(drop=True)
+    OPID = df['OPID'].tolist()[0]
+    CREATETIME = df['CreateTime'].tolist()[0]
+    
+    ngcnt_ls = df['NGCNT'].tolist()
+    total_ng = df['NGCNT'].sum()
+    ngcnt_ls.append(total_ng)
+    # Create table info each element type should be list
+    ng_info_ls = [[i] for i in ngcnt_ls]
+    del total_ng, ngcnt_ls
+    
+    pdi = plot_defect_info(sheet_ID=SHEET_ID)
+    COC2df = pdi.get_BONDING_MAP_df()
+    
+    if len(COC2df.index)!=0:
+        COC2 = COC2df['coc2'].tolist()[0]
+    else:
+        COC2 = "COC2 NOT FOUND"
+        
+    del COC2df
+    
+    lum_fs = grid_fs(client=pdi.MongoDBClient, db_name=pdi.DB, collection='LUM_SummaryTable')
+    R_light_ID = pdi.get_specific_object_id(df, 'LightingCheck_2D', 'R', Ins_type)
+    G_light_ID = pdi.get_specific_object_id(df, 'LightingCheck_2D', 'G', Ins_type)
+    B_light_ID = pdi.get_specific_object_id(df, 'LightingCheck_2D', 'B', Ins_type)
+    
+    R_tft_defect_arr, _ = pdi.get_defect_imshow_params(object_id=R_light_ID, LED_TYPE='R', fs=lum_fs, coc2=False)
+    y, x = R_tft_defect_arr.shape
+    del R_tft_defect_arr
+    
+    R_tft_x, R_tft_y = pdi.get_defect_coord(object_id=R_light_ID, fs=lum_fs, coc2=False)
+    G_tft_x, G_tft_y = pdi.get_defect_coord(object_id=G_light_ID, fs=lum_fs, coc2=False)
+    B_tft_x, B_tft_y = pdi.get_defect_coord(object_id=B_light_ID, fs=lum_fs, coc2=False)
+    
+    fig_full, axs = plt.subplots(1, 1)
+    fig_full.set_figheight(5)
+    fig_full.set_figwidth(13)
+    axs.set_xlim([x, 0])
+    axs.set_ylim([0, y])
+    axs.scatter(R_tft_x, R_tft_y, s=20, marker='.', edgecolors='red', facecolors='none')
+    axs.scatter(G_tft_x, G_tft_y, s=20, marker='.', edgecolors='green', facecolors='none')
+    axs.scatter(B_tft_x, B_tft_y, s=20, marker='.', edgecolors='blue', facecolors='none')
+    axs.tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
+    axs.invert_xaxis()
+    axs.invert_yaxis()
+    
+    axs.table(
+        cellText = ng_info_ls, # such as [[50], [42], [19], [111]]
+        colLabels = ['DefectCNT'],
+        rowLabels = ['R', 'G', 'B', 'Total'],
+        cellLoc='center',
+        bbox = [1.05, 0., 0.2, 1],
+    )
+    
+    temp_save_path = './modules/temp/temp_image.png'
+    create_ppt = CreatePPT()
+    
+    fig_full.suptitle(f'{CREATETIME}_{SHEET_ID}_{COC2}_{OPID}_{Ins_type} Result', fontsize=font_size, y=1)
+    fig_full.savefig(temp_save_path, facecolor=None, bbox_inches='tight')
+    
+    create_ppt(image_path=temp_save_path)
+    
+    return fig_full
+
+
+
+def main(sheet_ID:str, threshold:int, option:str, Ins_type=None|str, TFT_df=None|pd.DataFrame, OPID=None|str):
     options = ["COC2", "TFT", "TFT+COC2"]
     
     if threshold is not isinstance(threshold, int):
         threshold = int(threshold)
         
     if option==options[1]:
-        fig_list = plot_tft(sheet_ID, threshold, TFT_df=TFT_df, OPID=OPID)
+        fig_list = plot_tft(sheet_ID, threshold, Ins_type, TFT_df=TFT_df, OPID=OPID)
 
     elif option==options[0]:
         fig_list = plot_coc2(sheet_ID, threshold, onlyCOC2=True)
     
     elif option==options[2]:
-        fig_list = TFT_and_COC2(sheet_ID, threshold, TFT_df=TFT_df, OPID=OPID)
+        fig_list = TFT_and_COC2(sheet_ID, threshold, Ins_type, TFT_df=TFT_df, OPID=OPID)
         
     return fig_list
     
@@ -502,4 +592,4 @@ def main(sheet_ID:str, threshold:int, option:str, TFT_df=None|pd.DataFrame, OPID
         
 if __name__ == '__main__':
   
-    main(sheet_ID='VKV3457722A1812', threshold=20, option="TFT+COC2")
+    main(sheet_ID='VKV3457722A1812', threshold=20, option="TFT+COC2", Ins_type='L255', OPID='MT-ACL')
