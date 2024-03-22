@@ -70,10 +70,10 @@ class Chargemap:
         # 以 chip 當根源找
         self.chip_id = chip_id
         # 連結資料庫
-        self.collection_charge2d = connect_MongoDB(client='mongodb://wma:mamcb1@10.88.26.102:27017', db_name="AT", collection="4A_charge2d")  
-        self.collection_defectinfo = connect_MongoDB(client='mongodb://wma:mamcb1@10.88.26.102:27017', db_name="AT", collection="4A_defectinfo")            
-        self.fs_charge2d = grid_fs(client='mongodb://wma:mamcb1@10.88.26.102:27017', db_name="AT", collection="4A_charge2d")
-        self.fs_defectinfo = grid_fs(client='mongodb://wma:mamcb1@10.88.26.102:27017', db_name="AT", collection="4A_defectinfo")
+        self.collection_charge2d = connect_MongoDB(client='mongodb://xxx:xxx@10.88.26.102:27017', db_name="AT", collection="4A_charge2d")  
+        self.collection_defectinfo = connect_MongoDB(client='mongodb://xxx:xxx@10.88.26.102:27017', db_name="AT", collection="4A_defectinfo")            
+        self.fs_charge2d = grid_fs(client='mongodb://xxx:xxx@10.88.26.102:27017', db_name="AT", collection="4A_charge2d")
+        self.fs_defectinfo = grid_fs(client='mongodb://xxx:xxx@10.88.26.102:27017', db_name="AT", collection="4A_defectinfo")
 
         # query 資料庫
         self.df_defectinfo = pd.DataFrame.from_records(self.collection_defectinfo.find({'chip_id':self.chip_id}))
